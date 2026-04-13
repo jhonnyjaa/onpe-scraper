@@ -1,24 +1,24 @@
 {
-  "captured_at": "2026-04-13T02:04:02.078700+00:00",
+  "captured_at": "2026-04-13T02:46:46.872184+00:00",
   "payload": {
     "success": true,
     "message": "",
     "data": {
-      "actasContabilizadas": 8.15,
-      "contabilizadas": 7560,
+      "actasContabilizadas": 16.477,
+      "contabilizadas": 15285,
       "totalActas": 92766,
-      "participacionCiudadana": 6.508,
+      "participacionCiudadana": 13.217,
       "actasEnviadasJee": 0.0,
       "enviadasJee": 0,
-      "actasPendientesJee": 91.85,
-      "pendientesJee": 85206,
-      "fechaActualizacion": 1776045705175,
+      "actasPendientesJee": 83.523,
+      "pendientesJee": 77481,
+      "fechaActualizacion": 1776048106830,
       "idUbigeoDepartamento": 140000,
       "idUbigeoProvincia": 140100,
       "idUbigeoDistrito": 140101,
       "idUbigeoDistritoElectoral": 15,
-      "totalVotosEmitidos": 1778220,
-      "totalVotosValidos": 1591035,
+      "totalVotosEmitidos": 3611650,
+      "totalVotosValidos": 3214327,
       "porcentajeVotosEmitidos": 100,
       "porcentajeVotosValidos": 100
     }

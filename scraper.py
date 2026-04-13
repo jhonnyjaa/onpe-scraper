@@ -13,7 +13,7 @@ os.makedirs("data/snapshots", exist_ok=True)
 timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 ts_epoch  = datetime.now(timezone.utc).isoformat()
 
-# Sesion simulando navegador
+# Sesion simulando navegador real
 session = requests.Session()
 session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -49,7 +49,7 @@ def fetch(endpoint):
 totales       = fetch("totales")
 participantes = fetch("participantes")
 
-# Snapshots crudos
+# Snapshots crudos (fuente de verdad)
 with open(f"data/snapshots/{timestamp}_totales.json", "w", encoding="utf-8") as f:
     json.dump({"captured_at": ts_epoch, "payload": totales}, f, ensure_ascii=False, indent=2)
 
@@ -100,9 +100,9 @@ print(f"✅ Snapshot guardado: {timestamp}")
 print(f"   Actas contabilizadas: {t.get('actasContabilizadas')}%")
 print(f"   Total votos validos:  {t.get('totalVotosValidos'):,}")
 
-# Push a GitHub
-token = os.environ.get("GITHUB_TOKEN")
-github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")
+# Push a GitHub con token
+token       = os.environ.get("GITHUB_TOKEN")
+github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")  # <-- cambia esto
 repo_name   = os.environ.get("GITHUB_REPO", "onpe-scraper")
 
 if token:
