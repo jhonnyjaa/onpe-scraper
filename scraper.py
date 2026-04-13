@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 import os
 import sys
 import base64
-import time
 
 BASE_URL = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general"
 PARAMS = {"idEleccion": 10, "tipoFiltro": "eleccion"}
@@ -14,7 +13,6 @@ os.makedirs("data/snapshots", exist_ok=True)
 timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 ts_epoch  = datetime.now(timezone.utc).isoformat()
 
-# Sesion simulando navegador real
 session = requests.Session()
 session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -30,31 +28,23 @@ print("Iniciando sesion en ONPE...")
 home = session.get("https://resultadoelectoral.onpe.gob.pe/", timeout=15)
 print(f"Home status: {home.status_code}")
 
-def fetch(endpoint, reintentos=3):
+def fetch(endpoint):
     url = f"{BASE_URL}/{endpoint}"
-    for intento in range(1, reintentos + 1):
-        r = session.get(url, params=PARAMS, timeout=15)
-        print(f"[{endpoint}] intento {intento} - status={r.status_code} size={len(r.content)} bytes")
-        if r.content[:1] == b'<':
-            print(f"⚠️ Devolvio HTML, reintentando en 30 segundos...")
-            if intento < reintentos:
-                time.sleep(30)
-                continue
-            else:
-                print(f"❌ Todos los reintentos fallaron, abortando este ciclo")
-                sys.exit(0)
-        try:
-            return r.json()
-        except Exception as e:
-            print(f"ERROR parseando JSON: {e}")
-            print(f"Contenido crudo: {r.text[:500]}")
-            sys.exit(0)
+    r = session.get(url, params=PARAMS, timeout=15)
+    print(f"[{endpoint}] status={r.status_code} size={len(r.content)} bytes")
+    if r.content[:1] == b'<':
+        print(f"⚠️ Devolvio HTML, abortando este ciclo silenciosamente")
+        sys.exit(0)
+    try:
+        return r.json()
+    except Exception as e:
+        print(f"ERROR parseando JSON: {e}")
+        print(f"Contenido crudo: {r.text[:500]}")
+        sys.exit(0)
 
-# Fetch datos
 totales       = fetch("totales")
 participantes = fetch("participantes")
 
-# Guardar archivos localmente
 snapshot_totales_path = f"data/snapshots/{timestamp}_totales.json"
 snapshot_part_path    = f"data/snapshots/{timestamp}_participantes.json"
 totales_csv           = "data/historico_totales.csv"
@@ -66,7 +56,6 @@ with open(snapshot_totales_path, "w", encoding="utf-8") as f:
 with open(snapshot_part_path, "w", encoding="utf-8") as f:
     json.dump({"captured_at": ts_epoch, "payload": participantes}, f, ensure_ascii=False, indent=2)
 
-# Historico totales
 t = totales["data"]
 row_totales = {
     "captured_at":             ts_epoch,
@@ -85,7 +74,6 @@ if os.path.exists(totales_csv):
 else:
     df_t.to_csv(totales_csv, index=False)
 
-# Historico participantes
 rows_part = []
 for p in participantes["data"]:
     rows_part.append({
@@ -108,7 +96,6 @@ print(f"✅ Snapshot guardado: {timestamp}")
 print(f"   Actas contabilizadas: {t.get('actasContabilizadas')}%")
 print(f"   Total votos validos:  {t.get('totalVotosValidos'):,}")
 
-# Subir archivos a GitHub via API
 token       = os.environ.get("GITHUB_TOKEN")
 github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")
 repo_name   = os.environ.get("GITHUB_REPO", "onpe-scraper")
@@ -126,19 +113,12 @@ github_api.headers.update({
 def github_upload(local_path, repo_path):
     with open(local_path, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode("utf-8")
-
     url = f"https://api.github.com/repos/{github_user}/{repo_name}/contents/{repo_path}"
-
     r = github_api.get(url)
     sha = r.json().get("sha") if r.status_code == 200 else None
-
-    payload = {
-        "message": f"snapshot {timestamp} - {repo_path}",
-        "content": content_b64,
-    }
+    payload = {"message": f"snapshot {timestamp} - {repo_path}", "content": content_b64}
     if sha:
         payload["sha"] = sha
-
     r = github_api.put(url, json=payload)
     if r.status_code in (200, 201):
         print(f"✅ Subido: {repo_path}")
