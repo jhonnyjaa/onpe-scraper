@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, timezone
 import os
 import sys
-import subprocess
+import base64
 
 BASE_URL = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general"
 PARAMS = {"idEleccion": 10, "tipoFiltro": "eleccion"}
@@ -25,7 +25,6 @@ session.headers.update({
     "Connection": "keep-alive",
 })
 
-# Visitar pagina principal para obtener cookies
 print("Iniciando sesion en ONPE...")
 home = session.get("https://resultadoelectoral.onpe.gob.pe/", timeout=15)
 print(f"Home status: {home.status_code}")
@@ -49,15 +48,19 @@ def fetch(endpoint):
 totales       = fetch("totales")
 participantes = fetch("participantes")
 
-# Snapshots crudos (fuente de verdad)
-with open(f"data/snapshots/{timestamp}_totales.json", "w", encoding="utf-8") as f:
+# Guardar archivos localmente
+snapshot_totales_path     = f"data/snapshots/{timestamp}_totales.json"
+snapshot_part_path        = f"data/snapshots/{timestamp}_participantes.json"
+totales_csv               = "data/historico_totales.csv"
+part_csv                  = "data/historico_participantes.csv"
+
+with open(snapshot_totales_path, "w", encoding="utf-8") as f:
     json.dump({"captured_at": ts_epoch, "payload": totales}, f, ensure_ascii=False, indent=2)
 
-with open(f"data/snapshots/{timestamp}_participantes.json", "w", encoding="utf-8") as f:
+with open(snapshot_part_path, "w", encoding="utf-8") as f:
     json.dump({"captured_at": ts_epoch, "payload": participantes}, f, ensure_ascii=False, indent=2)
 
 # Historico totales
-totales_csv = "data/historico_totales.csv"
 t = totales["data"]
 row_totales = {
     "captured_at":             ts_epoch,
@@ -77,7 +80,6 @@ else:
     df_t.to_csv(totales_csv, index=False)
 
 # Historico participantes
-part_csv = "data/historico_participantes.csv"
 rows_part = []
 for p in participantes["data"]:
     rows_part.append({
@@ -100,24 +102,49 @@ print(f"✅ Snapshot guardado: {timestamp}")
 print(f"   Actas contabilizadas: {t.get('actasContabilizadas')}%")
 print(f"   Total votos validos:  {t.get('totalVotosValidos'):,}")
 
-# Push a GitHub con token
+# ── Subir archivos a GitHub via API ──────────────────────────────────────────
 token       = os.environ.get("GITHUB_TOKEN")
-github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")  # <-- cambia esto
+github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")
 repo_name   = os.environ.get("GITHUB_REPO", "onpe-scraper")
 
-if token:
-    print("Haciendo push a GitHub...")
-    repo_url = f"https://{token}@github.com/{github_user}/{repo_name}.git"
-    subprocess.run(["git", "config", "user.name", "railway-bot"], check=True)
-    subprocess.run(["git", "config", "user.email", "bot@railway.local"], check=True)
-    subprocess.run(["git", "remote", "set-url", "origin", repo_url], check=True)
-    subprocess.run(["git", "add", "data/"], check=True)
-    result = subprocess.run(["git", "diff", "--staged", "--quiet"])
-    if result.returncode != 0:
-        subprocess.run(["git", "commit", "-m", f"snapshot {timestamp}"], check=True)
-        subprocess.run(["git", "push"], check=True)
-        print("✅ Push a GitHub exitoso")
-    else:
-        print("ℹ️ Sin cambios que commitear")
-else:
+if not token:
     print("⚠️ GITHUB_TOKEN no encontrado, saltando push")
+    sys.exit(0)
+
+github_api = requests.Session()
+github_api.headers.update({
+    "Authorization": f"token {token}",
+    "Accept": "application/vnd.github.v3+json",
+})
+
+def github_upload(local_path, repo_path):
+    """Sube un archivo local a GitHub via API."""
+    with open(local_path, "rb") as f:
+        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    url = f"https://api.github.com/repos/{github_user}/{repo_name}/contents/{repo_path}"
+
+    # Verificar si el archivo ya existe (para obtener su SHA)
+    r = github_api.get(url)
+    sha = r.json().get("sha") if r.status_code == 200 else None
+
+    payload = {
+        "message": f"snapshot {timestamp} - {repo_path}",
+        "content": content_b64,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    r = github_api.put(url, json=payload)
+    if r.status_code in (200, 201):
+        print(f"✅ Subido: {repo_path}")
+    else:
+        print(f"❌ Error subiendo {repo_path}: {r.status_code} {r.text[:200]}")
+
+print("Subiendo archivos a GitHub...")
+github_upload(snapshot_totales_path, snapshot_totales_path)
+github_upload(snapshot_part_path,    snapshot_part_path)
+github_upload(totales_csv,           totales_csv)
+github_upload(part_csv,              part_csv)
+
+print("🎉 Todo listo!")
