@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timezone
 import os
 import sys
+import subprocess
 
 BASE_URL = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general"
 PARAMS = {"idEleccion": 10, "tipoFiltro": "eleccion"}
@@ -12,27 +13,24 @@ os.makedirs("data/snapshots", exist_ok=True)
 timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 ts_epoch  = datetime.now(timezone.utc).isoformat()
 
-# Usamos sesion para simular un navegador real
+# Sesion simulando navegador
 session = requests.Session()
 session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
     "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
     "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://resultadoelectoral.onpe.gob.pe/",
+    "Origin": "https://resultadoelectoral.onpe.gob.pe",
     "Connection": "keep-alive",
 })
 
-# Paso 1: visitar la pagina principal para obtener cookies
+# Visitar pagina principal para obtener cookies
 print("Iniciando sesion en ONPE...")
 home = session.get("https://resultadoelectoral.onpe.gob.pe/", timeout=15)
 print(f"Home status: {home.status_code}")
 
-# Paso 2: ahora hacer los requests a la API con la sesion activa
 def fetch(endpoint):
-    session.headers.update({
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://resultadoelectoral.onpe.gob.pe/",
-        "Origin": "https://resultadoelectoral.onpe.gob.pe",
-    })
     url = f"{BASE_URL}/{endpoint}"
     r = session.get(url, params=PARAMS, timeout=15)
     print(f"[{endpoint}] status={r.status_code} size={len(r.content)} bytes")
@@ -47,6 +45,7 @@ def fetch(endpoint):
         print(f"Contenido crudo: {r.text[:500]}")
         sys.exit(1)
 
+# Fetch datos
 totales       = fetch("totales")
 participantes = fetch("participantes")
 
@@ -100,3 +99,25 @@ else:
 print(f"✅ Snapshot guardado: {timestamp}")
 print(f"   Actas contabilizadas: {t.get('actasContabilizadas')}%")
 print(f"   Total votos validos:  {t.get('totalVotosValidos'):,}")
+
+# Push a GitHub
+token = os.environ.get("GITHUB_TOKEN")
+github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")
+repo_name   = os.environ.get("GITHUB_REPO", "onpe-scraper")
+
+if token:
+    print("Haciendo push a GitHub...")
+    repo_url = f"https://{token}@github.com/{github_user}/{repo_name}.git"
+    subprocess.run(["git", "config", "user.name", "railway-bot"], check=True)
+    subprocess.run(["git", "config", "user.email", "bot@railway.local"], check=True)
+    subprocess.run(["git", "remote", "set-url", "origin", repo_url], check=True)
+    subprocess.run(["git", "add", "data/"], check=True)
+    result = subprocess.run(["git", "diff", "--staged", "--quiet"])
+    if result.returncode != 0:
+        subprocess.run(["git", "commit", "-m", f"snapshot {timestamp}"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print("✅ Push a GitHub exitoso")
+    else:
+        print("ℹ️ Sin cambios que commitear")
+else:
+    print("⚠️ GITHUB_TOKEN no encontrado, saltando push")
