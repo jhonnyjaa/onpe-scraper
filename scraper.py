@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os
 import sys
 import base64
+import time
 
 BASE_URL = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general"
 PARAMS = {"idEleccion": 10, "tipoFiltro": "eleccion"}
@@ -29,30 +30,35 @@ print("Iniciando sesion en ONPE...")
 home = session.get("https://resultadoelectoral.onpe.gob.pe/", timeout=15)
 print(f"Home status: {home.status_code}")
 
-def fetch(endpoint):
+def fetch(endpoint, reintentos=3):
     url = f"{BASE_URL}/{endpoint}"
-    r = session.get(url, params=PARAMS, timeout=15)
-    print(f"[{endpoint}] status={r.status_code} size={len(r.content)} bytes")
-    if r.content[:1] == b'<':
-        print(f"ERROR: devolvio HTML en vez de JSON")
-        print(f"Primeros 300 chars: {r.text[:300]}")
-        sys.exit(1)
-    try:
-        return r.json()
-    except Exception as e:
-        print(f"ERROR parseando JSON: {e}")
-        print(f"Contenido crudo: {r.text[:500]}")
-        sys.exit(1)
+    for intento in range(1, reintentos + 1):
+        r = session.get(url, params=PARAMS, timeout=15)
+        print(f"[{endpoint}] intento {intento} - status={r.status_code} size={len(r.content)} bytes")
+        if r.content[:1] == b'<':
+            print(f"⚠️ Devolvio HTML, reintentando en 30 segundos...")
+            if intento < reintentos:
+                time.sleep(30)
+                continue
+            else:
+                print(f"❌ Todos los reintentos fallaron, abortando este ciclo")
+                sys.exit(0)
+        try:
+            return r.json()
+        except Exception as e:
+            print(f"ERROR parseando JSON: {e}")
+            print(f"Contenido crudo: {r.text[:500]}")
+            sys.exit(0)
 
 # Fetch datos
 totales       = fetch("totales")
 participantes = fetch("participantes")
 
 # Guardar archivos localmente
-snapshot_totales_path     = f"data/snapshots/{timestamp}_totales.json"
-snapshot_part_path        = f"data/snapshots/{timestamp}_participantes.json"
-totales_csv               = "data/historico_totales.csv"
-part_csv                  = "data/historico_participantes.csv"
+snapshot_totales_path = f"data/snapshots/{timestamp}_totales.json"
+snapshot_part_path    = f"data/snapshots/{timestamp}_participantes.json"
+totales_csv           = "data/historico_totales.csv"
+part_csv              = "data/historico_participantes.csv"
 
 with open(snapshot_totales_path, "w", encoding="utf-8") as f:
     json.dump({"captured_at": ts_epoch, "payload": totales}, f, ensure_ascii=False, indent=2)
@@ -102,7 +108,7 @@ print(f"✅ Snapshot guardado: {timestamp}")
 print(f"   Actas contabilizadas: {t.get('actasContabilizadas')}%")
 print(f"   Total votos validos:  {t.get('totalVotosValidos'):,}")
 
-# ── Subir archivos a GitHub via API ──────────────────────────────────────────
+# Subir archivos a GitHub via API
 token       = os.environ.get("GITHUB_TOKEN")
 github_user = os.environ.get("GITHUB_USER", "jhonnyjaa")
 repo_name   = os.environ.get("GITHUB_REPO", "onpe-scraper")
@@ -118,13 +124,11 @@ github_api.headers.update({
 })
 
 def github_upload(local_path, repo_path):
-    """Sube un archivo local a GitHub via API."""
     with open(local_path, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode("utf-8")
 
     url = f"https://api.github.com/repos/{github_user}/{repo_name}/contents/{repo_path}"
 
-    # Verificar si el archivo ya existe (para obtener su SHA)
     r = github_api.get(url)
     sha = r.json().get("sha") if r.status_code == 200 else None
 
