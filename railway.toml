@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+cronSchedule = "*/5 * * * *"
+startCommand = "python scraper.py"
