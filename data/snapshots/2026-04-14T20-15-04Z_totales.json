@@ -1,0 +1,26 @@
+{
+  "captured_at": "2026-04-14T20:15:04.981709+00:00",
+  "payload": {
+    "success": true,
+    "message": "",
+    "data": {
+      "actasContabilizadas": 77.735,
+      "contabilizadas": 72112,
+      "totalActas": 92766,
+      "participacionCiudadana": 58.861,
+      "actasEnviadasJee": 2.044,
+      "enviadasJee": 1896,
+      "actasPendientesJee": 20.221,
+      "pendientesJee": 18758,
+      "fechaActualizacion": 1776196428367,
+      "idUbigeoDepartamento": 140000,
+      "idUbigeoProvincia": 140100,
+      "idUbigeoDistrito": 140101,
+      "idUbigeoDistritoElectoral": 15,
+      "totalVotosEmitidos": 16083945,
+      "totalVotosValidos": 13562274,
+      "porcentajeVotosEmitidos": 100,
+      "porcentajeVotosValidos": 100
+    }
+  }
+}
